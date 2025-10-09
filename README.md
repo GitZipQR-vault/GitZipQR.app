@@ -1,3 +1,11 @@
+# How use?
+```bash
+git clone git@github.com:GitZipQR-vault/GitZipQR.pro.git
+cd GitZipQR.pro
+bun install
+git clone git@github.com:GitZipQR-vault/GitZip.cpp 
+git clone git@github.com:GitZipQR-vault/PaperStorageX
+```
 # LICENSE
 GitZipQR Proprietary License
 ============================

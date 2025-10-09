@@ -20,7 +20,7 @@ lerna-debug.log*
 report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Runtime data
-
+*.{png,jpg,tar,zip,webp,pdf,bak,zip,tar}
 pids
 _.pid
 _.seed
