@@ -2,7 +2,7 @@
 # SUPPORTED ONLY CORE LINUX
 [EN]
 # How use?
-- For start download package manager (https://bun.com/)[BUN]
+- For start download package manager https://bun.com/ [BUN]
 ```bash
 git clone https://github.com:GitZipQR-vault/GitZipQR.app.git
 cd GitZipQR.app
@@ -13,7 +13,7 @@ git clone https://github.com:GitZipQR-vault/PaperStorageX
 ```
 [RU]
 Как использовать?:
-- Для начала скачиваем пакетный менеджер (https://bun.com/)[BUN]
+- Для начала скачиваем пакетный менеджер https://bun.com/ [BUN]
 - Введите в терминал 
 ```bash
 git clone https://github.com/GitZipQR-vault/GitZipQR.app.git
