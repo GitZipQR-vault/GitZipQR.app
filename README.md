@@ -4,12 +4,12 @@
 # How use?
 - For start download package manager (https://bun.com/)[BUN]
 ```bash
-git clone https://github.com:GitZipQR-vault/GitZipQR.pro.git
-cd GitZipQR.pro
+git clone https://github.com:GitZipQR-vault/GitZipQR.app.git
+cd GitZipQR.app
 bun install
 git clone https://github.com:GitZipQR-vault/GitZip.cpp 
 git clone https://github.com:GitZipQR-vault/PaperStorageX
-./rub.sh
+./rub.sh 
 ```
 [RU]
 Как использовать?:
