@@ -1,6 +1,6 @@
 // -----------------------------
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./globals.css";
 
 // Backend is hardcoded; no IP field in UI
@@ -19,10 +19,9 @@ const T: Record<Lang, any> = {
     pass: "Password (≥20 chars)", passFile: "Use .txt/.bin", passText: "Type text",
     paperxToggle: "Enable PaperStorageX (all your data in page formatted A)",
     pxType: "Archive type", pxPage: "Page", pxDpi: "DPI", pxMargin: "Margin (mm)", pxCell: "Cell (px)", pxNano: "Nanotech",
-    wallet: "Wallet", copy: "Copy", copied: "Copied!", credits: "Credits",
-    liveScan: "Live Scan", stego: "Stego (WEBP)", txhash: "Tx hash", verify: "Verify",
-    teleCoins: "Get coins via Telegram",
-    buy: "Get credits", enterCoins: "Credits to buy", BACKEND_URL: "Server URL", confirmBuy: "Confirm", buying: "Waiting Telegram…", approved: "Approved", declined: "Declined", timeout: "Timeout", neterr: "Network error", saved: "Saved",
+    wallet: "Wallet", copy: "Copy", copied: "Copied!",
+    support: "Support the project", supportNote: "Donations keep GitZipQR alive. Encryption/Decryption is free now.",
+    liveScan: "Live Scan", stego: "Stego (WEBP)",
   },
   ru: {
     enc: "Шифрование → QR", dec: "Расшифровка из QR", pick: "Выбрать…",
@@ -34,15 +33,13 @@ const T: Record<Lang, any> = {
     pass: "Пароль (≥20 символов)", passFile: "Файл .txt/.bin", passText: "Текстом",
     paperxToggle: "Включить PaperStorageX (Все ваши данные в листах формата A)",
     pxType: "Тип архива", pxPage: "Страница", pxDpi: "DPI", pxMargin: "Поле (мм)", pxCell: "Ячейка (px)", pxNano: "Nanotech",
-    wallet: "Кошелёк", copy: "Скопировать", copied: "Скопировано!", credits: "Кредиты",
-    liveScan: "Live Scan", stego: "Стего (WEBP)", txhash: "Хэш транзакции", verify: "Подтвердить",
-    teleCoins: "Получить коины через Telegram",
-    buy: "Получить кредиты", enterCoins: "Сколько кредитов", BACKEND_URL: "Адрес сервера", confirmBuy: "Подтвердить", buying: "Ждём подтверждение…", approved: "Подтверждено", declined: "Отклонено", timeout: "Таймаут", neterr: "Ошибка сети", saved: "Сохранено",
+    wallet: "Кошелёк", copy: "Скопировать", copied: "Скопировано!",
+    support: "Поддержать проект", supportNote: "Пожертвования держат GitZipQR в строю. Кредиты для шифрования/расшифровки больше не нужны.",
+    liveScan: "Live Scan", stego: "Стего (WEBP)",
   }
 };
 
 const WALLET_ADDR = "0xa8b3A40008EDF9AF21D981Dc3A52aa0ed1cA88fD";
-const BACKEND_URL = "https://84.39.243.205:8787";
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
@@ -56,8 +53,6 @@ function Progress({ value }: { value: number }) {
   const v = Math.max(0, Math.min(100, value | 0));
   return (<div><div className="progress"><span style={{ width: `${v}%` }} /></div><div style={{ marginTop: 6, fontSize: 12 }}>{v}%</div></div>);
 }
-const fmtUptime = (sec: number) => `${(sec / 3600 | 0)}h ${((sec % 3600) / 60 | 0)}m`;
-const fmtTimeLeft = (sec: number) => !sec || sec <= 0 ? "" : `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
 
 export default function Page() {
   const [lang, setLang] = useState<Lang>("ru"); const tr = T[lang];
@@ -65,12 +60,50 @@ export default function Page() {
   const [toast, setToast] = useState<{ m: string; k?: "ok" | "err" } | null>(null);
   const notify = (m: string, k?: "ok" | "err") => { setToast({ m, k }); setTimeout(() => setToast(null), 2200); };
 
-  const hasIPC = typeof window !== "undefined" && Boolean((window as any)?.electron?.ipc);
+  const [hasIPC, setHasIPC] = useState(false);
+  const [hasBridge, setHasBridge] = useState(false);
+  const [isClient, setIsClient] = useState(false);
+  const encFileRef = useRef<HTMLInputElement | null>(null);
+  const decFileRef = useRef<HTMLInputElement | null>(null);
+  const decDirRef = useRef<HTMLInputElement | null>(null);
+  const bridgeReady = hasBridge || hasIPC;
+
+  useEffect(() => {
+    setIsClient(true);
+    const w: any = window as any;
+    setHasBridge(Boolean(w?.gzqrExtra || w?.electron?.ipc));
+    setHasIPC(Boolean((window as any)?.electron?.ipc));
+  }, []);
+
+  // Keep hidden pickers configured depending on bridge availability
+  useEffect(() => {
+    if (encFileRef.current) {
+      encFileRef.current.multiple = true;
+      if (!bridgeReady) {
+        encFileRef.current.setAttribute("webkitdirectory", "true");
+        encFileRef.current.setAttribute("directory", "true");
+      } else {
+        encFileRef.current.removeAttribute("webkitdirectory");
+        encFileRef.current.removeAttribute("directory");
+      }
+    }
+    if (decFileRef.current) {
+      decFileRef.current.multiple = true;
+      decFileRef.current.removeAttribute("webkitdirectory");
+      decFileRef.current.removeAttribute("directory");
+    }
+    if (decDirRef.current) {
+      decDirRef.current.multiple = true;
+      decDirRef.current.setAttribute("webkitdirectory", "true");
+      decDirRef.current.setAttribute("directory", "true");
+    }
+  }, [bridgeReady]);
 
   // resilient open helpers (Electron IPC -> gzqrExtra fallback)
   const openPath = async (path: string) => {
     try {
       const w: any = window as any;
+      if (!bridgeReady && !(w?.electron?.ipc)) { notify(lang === "ru" ? "Доступно в десктопном приложении" : "Desktop app required", "err"); return; }
       if (w?.gzqrExtra?.openPath) return await w.gzqrExtra.openPath(path);
       return await w?.electron?.ipc?.invoke?.("file.openPath", path);
     } catch (e) { notify("Open error: " + String((e as any)?.message || e), "err"); }
@@ -78,6 +111,7 @@ export default function Page() {
   const showInFolder = async (path: string) => {
     try {
       const w: any = window as any;
+      if (!bridgeReady && !(w?.electron?.ipc)) { notify(lang === "ru" ? "Доступно в десктопном приложении" : "Desktop app required", "err"); return; }
       if (w?.gzqrExtra?.showInFolder) return await w.gzqrExtra.showInFolder(path);
       return await w?.electron?.ipc?.invoke?.("file.showInFolder", path);
     } catch (e) { notify("Show error: " + String((e as any)?.message || e), "err"); }
@@ -108,40 +142,6 @@ export default function Page() {
   const [pdf, setPdf] = useState(""); const [pngDir, setPngDir] = useState("");
   const [decOutDir, setDecOutDir] = useState(""), [decTar, setDecTar] = useState(""), [decFile, setDecFile] = useState("");
 
-  // credits/bonus
-  const [credits, setCredits] = useState(0), [bonusLeft, setBonusLeft] = useState(0), [bonusSec, setBonusSec] = useState(0), [uptime, setUptime] = useState(0);
-
-  // buy via Telegram-confirmed backend
-  const [buyCoins, setBuyCoins] = useState<number>(10);
-  const [buying, setBuying] = useState<boolean>(false);
-  const refreshCredits = async () => {
-    try {
-      const c = await (window as any).gzqrExtra?.creditsGet?.();
-      if (c?.ok) {
-        setCredits(c.credits || 0);
-        setBonusLeft(c.bonusLeft || 0);
-        setBonusSec(c.bonusExpireSec || 0);
-      }
-    } catch { }
-  };
-
-  useEffect(() => {
-  (async () => {
-    try {
-      await refreshCredits();
-      const u = await (window as any).gzqrExtra?.uptimeGet?.(); if (u?.ok) setUptime(u.sec || 0);
-    } catch {}
-  })();
-  const t = setInterval(async () => {
-    try {
-      const u = await (window as any).gzqrExtra?.uptimeGet?.(); if (u?.ok) setUptime(u.sec || 0);
-      const b = await (window as any).gzqrExtra?.bonusTick?.(); if (b?.ok) { setBonusSec(b.bonusSec || 0); setBonusLeft(b.bonusLeft || 0); }
-      await refreshCredits();
-    } catch {}
-  }, 5000);
-  return () => clearInterval(t);
-}, []);
-
   // hook progress streams
   useEffect(() => {
     if (!hasIPC) return; const off = (window as any).electron?.ipc?.onProgress?.((d: any) => {
@@ -151,37 +151,33 @@ export default function Page() {
     }); return () => { try { off?.(); } catch { } };
   }, [hasIPC]);
 
-  const totalCredits = credits + bonusLeft;
   const havePass = passMode === "file" ? !!passFile : passOk;
+  const browserOnly = isClient && !bridgeReady;
 
-  // ⛏️ Главное: НЕ блочим кнопки по кредитам ни в OSS, ни в PRO.
-  const canEncode = !!encIn && havePass && (!bindPhoto || !!photoPath);
+  // Кнопки не зависят от кредитов; в браузере блокируем, если нет мостика.
+  const canEncode = bridgeReady && !!encIn && havePass && (!bindPhoto || !!photoPath);
+  const canDecode = bridgeReady && !!(pngDir || pdf) && havePass;
 
   const ipcPick = useIPC("file.pickPath"), ipcPdf = useIPC("pdf.toPngs");
-
-  // pay verify
-  const [tx, setTx] = useState("");
-  const verifyTx = async () => {
-    try {
-      const r = await (window as any).gzqrExtra?.payVerifyTx?.(tx.trim());
-      if (r?.ok) { notify(`+${r.creditsAdded || 0} ${tr.credits}`, "ok"); await refreshCredits(); }
-      else if (r?.pending) { notify("⏳ Pending confirmations", "ok"); }
-      else { notify(String(r?.error || "Verify error"), "err"); }
-    } catch (e: any) { notify(String(e?.message || e), "err"); }
-  };
-
-  // helpers (оставляем, но НЕ используем для предсписания)
-  const doConsume = async (n: number, why: string) => {
-    const r = await (window as any).gzqrExtra?.creditsConsume?.(n, why);
-    if (!r?.ok) { notify(lang === "ru" ? "Нет кредитов" : "No credits", "err"); return false; }
-    setCredits(r.credits || 0); setBonusLeft(r.bonusLeft || 0);
-    return true;
-  };
 
   // clamp PaperX for stability
   const safePxDpi = clamp(pxDpi, 72, 1200);
   const safePxCell = clamp(pxCell, 1, 4);
   const safePxMargin = clamp(pxMargin, 0, 20);
+
+  const copyWallet = async () => {
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(WALLET_ADDR);
+        notify(tr.copied, "ok"); return;
+      }
+      if ((window as any).gzqrExtra?.copy) {
+        await (window as any).gzqrExtra.copy(WALLET_ADDR);
+        notify(tr.copied, "ok"); return;
+      }
+      notify(lang === "ru" ? "Копирование недоступно" : "Copy not available", "err");
+    } catch (e: any) { notify(String(e?.message || e), "err"); }
+  };
 
   return (
     <div style={{ display: "grid", gap: 14, maxWidth: 980, margin: "16px auto" }}>
@@ -190,66 +186,32 @@ export default function Page() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h2 style={{ margin: 0 }}>GitZipQR</h2>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <div className="tag">{T[lang].credits}: <b>{totalCredits}</b> <small style={{ opacity: .7 }}>{bonusLeft > 0 ? `(${bonusLeft}, ${fmtTimeLeft(bonusSec)})` : `(${fmtUptime(uptime)})`}</small></div>
+          {browserOnly && <div className="tag">{lang === "ru" ? "Браузер" : "Browser"}</div>}
           <div><button className={`tag ${lang === "en" ? "active" : ""}`} onClick={() => setLang("en")}>EN</button><button className={`tag ${lang === "ru" ? "active" : ""}`} onClick={() => setLang("ru")}>RU</button></div>
           <div><button className={`tag ${plan === "oss" ? "active" : ""}`} onClick={() => setPlan("oss")}>OSS</button><button className={`tag ${plan === "pro" ? "active" : ""}`} onClick={() => setPlan("pro")}>PRO</button></div>
         </div>
       </div>
 
-      {/* Payments */}
-      <section className="card" style={{ display: "grid", gap: 10 }}>
-        <h3>💳 {tr.wallet}</h3>
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <div className="link-pill">{WALLET_ADDR}</div>
-          <button onClick={async () => { await (window as any).gzqrExtra?.copy?.(WALLET_ADDR); notify(tr.copied, "ok"); }}>{tr.copy}</button>
-        </div>
-        <div className="card" style={{ display: "grid", gap: 10, padding: 12 }}>
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <strong>🧾 {tr.buy}</strong>
-            <label className="tag">
-              {tr.enterCoins}:&nbsp;
-              <input type="number" min={1} step={1} value={buyCoins}
-                onChange={e => setBuyCoins(Math.max(1, parseInt(e.target.value || "1", 10) || 1))}
-                style={{ width: 110, marginLeft: 6 }} />
-            </label>
-            <button className="btn-primary" disabled={buying || !(buyCoins > 0)} onClick={async () => {
-              try {
-                setBuying(true);
-                const ctrl = new AbortController();
-                const t = setTimeout(() => ctrl.abort(), 170000);
-                const r = await fetch(BACKEND_URL.replace(/\/$/, "") + "/GitZipQR/getCoins", {
-                  method: "POST", headers: { "content-type": "application/json" },
-                  body: JSON.stringify({ coins: buyCoins }),
-                  credentials: "include", signal: ctrl.signal
-                }).catch((e) => { throw e; });
-                clearTimeout(t);
-                let j: any = null; try { j = await r.json(); } catch { }
-                if (j && j.bool === 202) {
-                  const add = await (window as any).gzqrExtra?.creditsAdd?.(buyCoins);
-                  await refreshCredits();
-                  notify(tr.approved + (add?.ok ? "" : " (local add warn)"), "ok");
-                } else if (j && j.bool === 403) {
-                  notify(tr.declined, "err");
-                } else if (j && j.error === "timeout") {
-                  notify(tr.timeout, "err");
-                } else {
-                  notify(String(j?.error || "HTTP " + r.status), "err");
-                }
-              } catch (e: any) {
-                if (String(e?.name) === "AbortError") notify(tr.timeout, "err");
-                else notify(tr.neterr + ": " + String(e?.message || e), "err");
-              } finally {
-                setBuying(false);
-                await refreshCredits();
-              }
-            }}>{buying ? ("⏳ " + tr.buying) : ("✅ " + tr.confirmBuy)}</button>
+      {browserOnly && (
+        <div className="card" style={{ display: "grid", gap: 6 }}>
+          <strong>{lang === "ru" ? "Веб-режим" : "Web mode"}</strong>
+          <div style={{ fontSize: 13, opacity: .85 }}>
+            {lang === "ru"
+              ? "Шифрование и работа с файлами выполняются через десктопное приложение. В браузере доступен только блок поддержки."
+              : "Encryption/decryption run via the desktop app. In browser mode you only have the support section."}
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <input value={tx} onChange={e => setTx(e.target.value)} placeholder={tr.txhash} style={{ minWidth: 320 }} />
-          <button onClick={verifyTx}>{tr.verify}</button>
-          <div style={{ fontSize: 12, opacity: .7 }}>Rule: 1500 USDC (Ethereum, ERC-20) → +1 credits (multiples apply)</div>
+      )}
+
+      {/* Payments */}
+      <section className="card" style={{ display: "grid", gap: 10 }}>
+        <h3>💳 {tr.support}</h3>
+        <div style={{ fontSize: 14, opacity: .9 }}>{tr.supportNote}</div>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <div className="link-pill">{WALLET_ADDR}</div>
+          <button onClick={copyWallet}>{tr.copy}</button>
         </div>
+        <div style={{ fontSize: 12, opacity: .65 }}>USDC / ETH · Ethereum mainnet</div>
       </section>
 
       {/* Bind to photo */}
@@ -258,7 +220,10 @@ export default function Page() {
           <input type="checkbox" checked={bindPhoto} onChange={e => setBindPhoto(e.target.checked)} />
           <span className="label">{tr.bindPhoto}</span>
         </label>
-        <button disabled={!bindPhoto} onClick={async () => { const r = await (window as any).gzqrExtra?.pickImage?.(); if (r?.ok) setPhotoPath(r.path); }}>{tr.choosePhoto}</button>
+        <button disabled={!bindPhoto || !bridgeReady} onClick={async () => {
+          if (!bridgeReady) { notify(lang === "ru" ? "Нужен десктопный клиент" : "Desktop app required", "err"); return; }
+          const r = await (window as any).gzqrExtra?.pickImage?.(); if (r?.ok) setPhotoPath(r.path);
+        }}>{tr.choosePhoto}</button>
         <div style={{ fontSize: 12, opacity: .85 }}>Фото: <code>{photoPath || "—"}</code></div>
       </div>
 
@@ -279,7 +244,16 @@ export default function Page() {
           <label className="tag"><input type="radio" checked={passMode === "file"} onChange={() => setPassMode("file")} /> {tr.passFile}</label>
           {passMode === "file" ? (
             <>
-              <button onClick={async () => { const r = await (window as any).gzqrExtra?.pickPassFile?.(); if (r?.ok) setPassFile(r.path); }}>Browse…</button>
+              <button onClick={async () => {
+                if (bridgeReady) {
+                  const r = await (window as any).gzqrExtra?.pickPassFile?.(); if (r?.ok) setPassFile(r.path);
+                } else {
+                  const input = document.createElement("input");
+                  input.type = "file"; input.accept = ".txt,.bin,.key,.pass";
+                  input.onchange = () => { const f = input.files?.[0]; if (f) setPassFile(f.name); };
+                  input.click();
+                }
+              }}>Browse…</button>
               <code style={{ fontSize: 12, opacity: .85 }}>{passFile || `⛔`}</code>
             </>
           ) : (
@@ -292,14 +266,34 @@ export default function Page() {
 
         {/* Input + outName */}
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <button onClick={async () => { const r = await useIPC("file.pickPath")({ mode: "fileOrDir" }); if (r?.ok) setEncIn(r.path); }}>{tr.pick}</button>
+          <button onClick={async () => {
+            if (bridgeReady) {
+              const r = await useIPC("file.pickPath")({ mode: "fileOrDir" }); if (r?.ok) setEncIn(r.path);
+            } else {
+              encFileRef.current?.click();
+            }
+          }}>{tr.pick}</button>
+          <input ref={encFileRef} type="file" style={{ display: "none" }} accept=".zip,.tar,.gz,.tgz,.7z,.rar" onChange={e => {
+            const f = e.target.files?.[0];
+            if (f) {
+              const rel = (f as any).webkitRelativePath || "";
+              if (rel) setEncIn(rel.split("/")[0] || f.name);
+              else setEncIn(f.name);
+            }
+          }} />
           <div style={{ fontSize: 12, opacity: .85 }}>{tr.selected}: <code>{encIn || "⛔"}</code></div>
           <div style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center" }}>
             <span style={{ fontSize: 12, opacity: .85 }}>{tr.outName}</span>
             <input value={outName} onChange={e => setOutName(e.target.value)} style={{ width: 180 }} />
           </div>
         </div>
-        <div className="drop" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const f = (e.dataTransfer!.files || [])[0] as any; const p = (f?.path || ""); if (p) setEncIn(p); }}>{tr.dropFile}</div>
+        <div className="drop" onDragOver={e => e.preventDefault()} onDrop={e => {
+          e.preventDefault();
+          const f = (e.dataTransfer!.files || [])[0] as any;
+          const p = (f?.path || "");
+          if (p) setEncIn(p);
+          else if (f?.name) setEncIn(f.name);
+        }}>{tr.dropFile}</div>
 
         {/* PaperX settings */}
         {plan === "oss" && usePaperX && (
@@ -318,11 +312,12 @@ export default function Page() {
         {/* Action row */}
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <button className="btn-primary" disabled={!canEncode} onClick={async () => {
+            if (!bridgeReady) { notify(lang === "ru" ? "Нужен десктопный клиент" : "Desktop app required", "err"); return; }
             try {
               setPEnc(0); setPdf(""); setPngDir("");
               if (plan === "pro") {
                 const r = await (window as any).gzqrExtra?.encRun?.({ input: encIn, ...(passMode === "file" ? { passFile } : { pass }), makePdf: true, photo: bindPhoto ? photoPath : undefined, outName, pro: true });
-                if (!r?.ok) { notify("Encode error", "err"); await refreshCredits(); return; }
+                if (!r?.ok) { notify("Encode error", "err"); return; }
                 if (r.pdf) setPdf(r.pdf);
                 notify(lang === "ru" ? "Готово: PDF создан" : "Done: PDF ready", "ok");
               } else {
@@ -331,28 +326,28 @@ export default function Page() {
                     mode: "encode", input: encIn, ...(passMode === "file" ? { passFile } : { pass }),
                     outBase: outName, type: pxType, page: pxPage, dpi: safePxDpi, marginMM: safePxMargin, cell: safePxCell, nanotech: pxNano, outDir: ".gzqr_tmp/paperx"
                   });
-                  if (!r?.ok) { notify("PaperStorageX error", "err"); await refreshCredits(); return; }
+                  if (!r?.ok) { notify("PaperStorageX error", "err"); return; }
                   if (r.pdfPath) setPdf(r.pdfPath);
                   notify("PaperStorageX PDF ready", "ok");
                 } else {
                   const r = await (window as any).gzqrExtra?.encRun?.({ input: encIn, ...(passMode === "file" ? { passFile } : { pass }), makePdf: false, photo: bindPhoto ? photoPath : undefined, outName, pro: false });
-                  if (!r?.ok) { notify("Encode error", "err"); await refreshCredits(); return; }
+                  if (!r?.ok) { notify("Encode error", "err"); return; }
                   if (r.pngDir) setPngDir(r.pngDir);
                   if (r.pdf) setPdf(r.pdf);
                   notify("QR PNG ready", "ok");
                 }
               }
-              await refreshCredits();
-            } catch (e: any) { notify(String(e?.message || e), "err"); await refreshCredits(); }
+            } catch (e: any) { notify(String(e?.message || e), "err"); }
           }}>🧩 {tr.runEncode}</button>
 
-          <button onClick={() => { (window as any).gzqrExtra?.encCancel?.(); }}>{tr.cancel}</button>
+          <button disabled={!bridgeReady} onClick={() => { if (!bridgeReady) return; (window as any).gzqrExtra?.encCancel?.(); }}>{tr.cancel}</button>
 
           {(plan === "pro") && (
             <>
-              <button disabled={!pdf} onClick={() => openPath(pdf)}>{tr.openPdf}</button>
-              <button disabled={!(pngDir || pdf)} onClick={() => showInFolder(pngDir || pdf)}>{tr.showInFolder}</button>
-              <button disabled={!pngDir && !pdf} onClick={async () => {
+              <button disabled={!bridgeReady || !pdf} onClick={() => openPath(pdf)}>{tr.openPdf}</button>
+              <button disabled={!bridgeReady || !(pngDir || pdf)} onClick={() => showInFolder(pngDir || pdf)}>{tr.showInFolder}</button>
+              <button disabled={!bridgeReady || (!pngDir && !pdf)} onClick={async () => {
+                if (!bridgeReady) { notify(lang === "ru" ? "Нужен десктопный клиент" : "Desktop app required", "err"); return; }
                 const canvas = document.createElement("canvas"); const ctx = canvas.getContext("2d")!;
                 canvas.width = 2048; canvas.height = 2048; ctx.fillStyle = "#000"; ctx.fillRect(0, 0, 2048, 2048);
                 const data = canvas.toDataURL("image/webp", 0.95);
@@ -363,13 +358,13 @@ export default function Page() {
           )}
           {(plan === "oss" && usePaperX) && (
             <>
-              <button disabled={!pdf} onClick={() => openPath(pdf)}>{tr.openPdf}</button>
-              <button disabled={!pdf} onClick={() => showInFolder(pdf)}>{tr.showInFolder}</button>
+              <button disabled={!bridgeReady || !pdf} onClick={() => openPath(pdf)}>{tr.openPdf}</button>
+              <button disabled={!bridgeReady || !pdf} onClick={() => showInFolder(pdf)}>{tr.showInFolder}</button>
             </>
           )}
           {(plan === "oss" && !usePaperX) && (
             <>
-              <button disabled={!pngDir} onClick={() => showInFolder(pngDir)}>{tr.showInFolder}</button>
+              <button disabled={!bridgeReady || !pngDir} onClick={() => showInFolder(pngDir)}>{tr.showInFolder}</button>
             </>
           )}
         </div>
@@ -380,32 +375,76 @@ export default function Page() {
       <section className="card" style={{ display: "grid", gap: 12 }}>
         <h3>🔓 {tr.dec}</h3>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <button onClick={async () => { const r = await (window as any).gzqrExtra?.pickPDF?.(); if (r?.ok) { const x = await ipcPdf({ pdf: r.path, pro: plan === "pro" }); if (x?.dir) { setPngDir(x.dir); setPdf(r.path); } } }}>{tr.browsePdf}</button>
-          <button onClick={async () => { const r = await useIPC("file.pickPath")({ mode: "dir" }); if (r?.ok) { setPngDir(r.path); setPdf(""); } }}>{tr.pick}</button>
+          <button onClick={async () => {
+            if (bridgeReady) {
+              const r = await (window as any).gzqrExtra?.pickPDF?.(); if (r?.ok) { const x = await ipcPdf({ pdf: r.path, pro: plan === "pro" }); if (x?.dir) { setPngDir(x.dir); setPdf(r.path); } }
+            } else {
+              const input = document.createElement("input");
+              input.type = "file"; input.accept = ".pdf,.png,.webp";
+              input.onchange = () => { const f = input.files?.[0]; if (f) { setPdf(f.name); setPngDir(f.name); } };
+              input.click();
+            }
+          }}>{tr.browsePdf}</button>
+          <button onClick={async () => {
+            if (bridgeReady) {
+              const r = await useIPC("file.pickPath")({ mode: "dir" }); if (r?.ok) { setPngDir(r.path); setPdf(""); }
+            } else {
+              // allow picking directory of images via fake directory input
+              decDirRef.current?.click();
+            }
+          }}>{tr.pick}</button>
+          <input ref={decFileRef} type="file" style={{ display: "none" }} accept=".pdf,.png,.webp" onChange={e => {
+            const f = e.target.files?.[0];
+            if (f) { setPngDir(f.name); setPdf(f.name); }
+          }} />
+          <input ref={decDirRef} type="file" style={{ display: "none" }} multiple onChange={e => {
+            const f = e.target.files?.[0];
+            if (f) {
+              const rel = (f as any).webkitRelativePath || "";
+              if (rel) {
+                setPngDir(rel.split("/")[0] || f.name);
+                setPdf("");
+              } else {
+                setPngDir(f.name);
+                setPdf(f.name);
+              }
+            }
+          }} />
           <div style={{ fontSize: 12, opacity: .85 }}><code>{pdf || pngDir || "⛔"}</code></div>
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <label className="tag"><input type="radio" checked={passMode === "text"} onChange={() => setPassMode("text")} /> {tr.passText}</label>
           <label className="tag"><input type="radio" checked={passMode === "file"} onChange={() => setPassMode("file")} /> {tr.passFile}</label>
           {passMode === "file"
-            ? (<><button onClick={async () => { const r = await (window as any).gzqrExtra?.pickPassFile?.(); if (r?.ok) setPassFile(r.path); }}>Browse…</button><code style={{ fontSize: 12, opacity: .85 }}>{passFile || "⛔"}</code></>)
+            ? (<><button disabled={!bridgeReady} onClick={async () => {
+              if (bridgeReady) {
+                const r = await (window as any).gzqrExtra?.pickPassFile?.(); if (r?.ok) setPassFile(r.path);
+              } else {
+                const input = document.createElement("input"); input.type = "file"; input.accept = ".txt,.bin,.key,.pass";
+                input.onchange = () => { const f = input.files?.[0]; if (f) setPassFile(f.name); };
+                input.click();
+              }
+            }}>Browse…</button><code style={{ fontSize: 12, opacity: .85 }}>{passFile || "⛔"}</code></>)
             : (<input type="password" value={pass} onChange={e => setPass(e.target.value)} placeholder={tr.pass} style={{ minWidth: 280 }} />)}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <button className="btn-primary" onClick={async () => {
+          <button className="btn-primary" disabled={!canDecode} onClick={async () => {
+            if (!bridgeReady) { notify(lang === "ru" ? "Нужен десктопный клиент" : "Desktop app required", "err"); return; }
             try {
               setPDec(0);
               const r = await (window as any).gzqrExtra?.decRun?.({ dir: pngDir, ...(passMode === "file" ? { passFile } : { pass }), photo: bindPhoto ? photoPath : undefined, outName, pro: plan === "pro" });
-              if (!r?.ok) { notify("Decode error", "err"); await refreshCredits(); return; }
+              if (!r?.ok) { notify("Decode error", "err"); return; }
               setDecOutDir(r.outDir || ""); setDecTar(r.tarPath || ""); setDecFile(r.restoredFile || "");
               notify(lang === "ru" ? "Готово: можно открыть" : "Done: you may open", "ok");
-              await refreshCredits();
-            } catch (e: any) { notify(String(e?.message || e), "err"); await refreshCredits(); }
+            } catch (e: any) { notify(String(e?.message || e), "err"); }
           }}>{tr.collect}</button>
-          <button onClick={() => { (window as any).gzqrExtra?.decCancel?.(); }}>{tr.cancel}</button>
-          {plan === "pro" && <button onClick={async () => { const r = await (window as any).gzqrExtra?.liveScan?.(); if (!r?.ok) notify("Live scan error", "err"); else notify("Live scan started", "ok"); }}>{tr.liveScan}</button>}
-          <button disabled={!decFile && !decOutDir && !pdf} onClick={() => openPath(decFile || decOutDir || pdf)}>{tr.open}</button>
-          <button disabled={!decOutDir && !pngDir} onClick={() => showInFolder(decOutDir || pngDir)}>{tr.showInFolder}</button>
+          <button disabled={!bridgeReady} onClick={() => { if (!bridgeReady) return; (window as any).gzqrExtra?.decCancel?.(); }}>{tr.cancel}</button>
+          {plan === "pro" && <button disabled={!bridgeReady} onClick={async () => {
+            if (!bridgeReady) { notify(lang === "ru" ? "Нужен десктопный клиент" : "Desktop app required", "err"); return; }
+            const r = await (window as any).gzqrExtra?.liveScan?.(); if (!r?.ok) notify("Live scan error", "err"); else notify("Live scan started", "ok");
+          }}>{tr.liveScan}</button>}
+          <button disabled={!bridgeReady || (!decFile && !decOutDir && !pdf)} onClick={() => openPath(decFile || decOutDir || pdf)}>{tr.open}</button>
+          <button disabled={!bridgeReady || (!decOutDir && !pngDir)} onClick={() => showInFolder(decOutDir || pngDir)}>{tr.showInFolder}</button>
         </div>
         <Progress value={pDec} />
         {(decTar || decOutDir || decFile) && <div style={{ fontSize: 12, opacity: .9 }}>

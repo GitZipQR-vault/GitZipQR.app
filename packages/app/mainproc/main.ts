@@ -239,14 +239,9 @@ ipcMain.handle("file.pickImage", async (e) => {
   return { ok: true, path: r.filePaths[0] };
 });
 
-// ---- encoder (PRO: charge 1 credit)
+// ---- encoder (free)
 ipcMain.handle("encoder.run", async (_e, { input, outDir, pass, makePdf, pro }: { input: string; outDir?: string; pass?: string; makePdf?: boolean; pro?: boolean }) => {
   try {
-    // OSS is free; PRO requires debit
-    if (pro === true) {
-      const c = tryConsume(1, "encoder.run");
-      if (!c.ok) return { ok: false, error: "No credits" };
-    }
     const ENC = resolveBin("encode");
     if (!input) throw new Error("No input path");
     let real = ensurePathReal(input);
@@ -294,13 +289,9 @@ ipcMain.handle("encoder.run", async (_e, { input, outDir, pass, makePdf, pro }: 
   } catch (e: any) { return { ok: false, error: String(e?.message || e) }; }
 });
 
-// ---- decoder (+robust tar) — PRO: charge 1 credit
+// ---- decoder (+robust tar) — free
 ipcMain.handle("decoder.run", async (_e, { dir, outDir, pass, pro }: { dir: string; outDir?: string; pass?: string; pro?: boolean }) => {
   try {
-    if (pro) {
-      const c = tryConsume(1, "decoder.run");
-      if (!c.ok) return { ok: false, error: "No credits" };
-    }
     const DEC = resolveBin("decode");
     let real = ensurePathReal(dir);
     if (!fs.existsSync(real)) throw new Error(`PNG folder not found: ${real}`);
@@ -352,13 +343,9 @@ ipcMain.handle("decoder.run", async (_e, { dir, outDir, pass, pro }: { dir: stri
   } catch (e: any) { return { ok: false, error: String(e?.message || e) }; }
 });
 
-// ---- PDF → PNGs (used in decrypt): PRO: charge 1 credit when flagged
+// ---- PDF → PNGs (used in decrypt): free even for PRO
 ipcMain.handle("pdf.toPngs", async (_e, { pdf, outDir, pro }: { pdf: string; outDir?: string; pro?: boolean }) => {
   try {
-    if (pro) {
-      const c = tryConsume(1, "pdf.toPngs");
-      if (!c.ok) return { ok: false, error: "No credits" };
-    }
     if (!pdf) throw new Error("No PDF path");
     let real = ensurePathReal(pdf);
     if (!fs.existsSync(real)) throw new Error(`PDF not found: ${real}`);
@@ -453,11 +440,9 @@ ipcMain.handle("uptime.get", async () => ({ ok: true, sec: Math.max(0, Math.floo
 ipcMain.handle("bonus.tick", async () => ({ ok: true, bonusSec: Math.max(0, Math.floor((bonusExpireAt ? (bonusExpireAt - Date.now()) : 0) / 1000)), bonusLeft }));
 ipcMain.handle("price.subscribe", async () => { broadcastPrice(); return { ok: true }; });
 
-// ---- Live Scan helper (PRO: charge 1 credit)
+// ---- Live Scan helper (free)
 ipcMain.handle("live.scan", async () => {
   try {
-    const c = tryConsume(1, "live.scan");
-    if (!c.ok) return { ok: false, error: "No credits" };
     const p = spawn("bun", ["packages/app/scripts/scan_live.ts"], { cwd: process.cwd() });
     const send = (line: string) => { try { win?.webContents.send("progress", { kind: "sys", line }); } catch { } };
     p.stdout.on("data", (d: Buffer) => String(d).split(/\r?\n/).forEach(s => s && send(s)));
@@ -496,8 +481,6 @@ try {
     
 ipcMain.handle("stego.saveWebp", async (_e, { dataUrl, outName, pro }: { dataUrl: string; outName?: string; pro?: boolean }) => {
       try {
-        if (pro) { if (pro) { const c = tryConsume(1, "stego.saveWebp"); if (!c.ok) return { ok: false, error: "No credits" }; } }
-
         if (!/^data:image\/webp;base64,/.test(String(dataUrl || ""))) throw new Error("Bad data URL");
         const buf = Buffer.from(String(dataUrl).split(",", 2)[1] || "", "base64");
         if (!buf.length) throw new Error("Empty data");

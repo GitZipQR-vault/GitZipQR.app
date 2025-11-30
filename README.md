@@ -1,10 +1,24 @@
+## *OpenSource product!*
+# SUPPORTED ONLY CORE LINUX
+[EN]
 # How use?
+- For start download package manager (https://bun.com/)[BUN]
 ```bash
 git clone git@github.com:GitZipQR-vault/GitZipQR.pro.git
 cd GitZipQR.pro
 bun install
 git clone git@github.com:GitZipQR-vault/GitZip.cpp 
 git clone git@github.com:GitZipQR-vault/PaperStorageX
+```
+[RU]
+Как использовать?:
+- Для начала скачиваем пакетный менеджер (https://bun.com/)[BUN]
+- Введите в терминал 
+```bash
+git clone https://github.com/GitZipQR-vault/GitZipQR.app.git
+cd GitZipQR.app
+bun install
+./run.sh
 ```
 # LICENSE
 GitZipQR Proprietary License
@@ -14,7 +28,6 @@ GitZipQR Proprietary License
 © 2025–Present Daniil V [RestlessByte]. All rights reserved.  
 
 [RU]
-
 1. Настоящее приложение "GitZipQR" (включая исходный код, собранные бинарные файлы,
    дистрибутивы и любую связанную документацию) является интеллектуальной собственностью
    автора: Daniil V [RestlessByte].
